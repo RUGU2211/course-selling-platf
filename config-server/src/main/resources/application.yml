@@ -3,6 +3,8 @@ server:
 spring:
   application:
     name: config-server
+  profiles:
+    active: native  # Explicitly activate native profile (disables Git mode)
   cloud:
     config:
       server:
