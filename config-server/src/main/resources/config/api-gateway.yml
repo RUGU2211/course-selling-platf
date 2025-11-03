@@ -80,3 +80,5 @@ management:
   endpoint:
     health:
       show-details: always
+    gateway:
+      enabled: true
