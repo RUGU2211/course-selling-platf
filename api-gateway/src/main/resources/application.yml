@@ -1,15 +1,6 @@
 spring:
   application:
     name: api-gateway
-  # Config Server import disabled for local development
-  # config:
-  #   import: optional:configserver:http://course-platform-config:8888
-  # profiles:
-  #   active: docker
-  cloud:
-    gateway:
-      server:
-        webflux:
-          discovery:
-            locator:
-              enabled: false
+  # Config Server configuration is loaded from application.properties
+  # Gateway routes are configured in config-server/src/main/resources/config/api-gateway.yml
+  # This file should not contain gateway routes to avoid conflicts
