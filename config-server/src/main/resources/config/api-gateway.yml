@@ -34,8 +34,6 @@ spring:
               uri: lb://user-management-service
               predicates:
                 - Path=/user-management-service/**
-              filters:
-                - RemoveResponseHeader=Access-Control-Allow-Origin
 
             - id: course-management-service
               uri: lb://course-management-service
