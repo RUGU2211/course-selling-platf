@@ -27,6 +27,7 @@ spring:
           lower-case-service-id: true
       routes:
         # Use service discovery (lb://) for services registered in Eureka
+        # Services have context paths (e.g., /course-management-service), so paths are forwarded as-is
         - id: user-management-service
           uri: lb://user-management-service
           predicates:
