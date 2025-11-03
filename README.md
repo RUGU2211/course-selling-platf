@@ -1,5 +1,5 @@
 <<<<<<< HEAD
-# Course Selling Platform 
+# Course Selling Platform ......
 
 A comprehensive microservices-based course selling platform built with Spring Boot, React, and Docker.
 
