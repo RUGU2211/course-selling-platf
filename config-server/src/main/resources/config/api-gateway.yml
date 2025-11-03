@@ -32,41 +32,22 @@ spring:
           predicates:
             - Path=/user-management-service/**
           filters:
-            - name: RewritePath
-              args:
-                regexp: /user-management-service/(?<path>.*)
-                replacement: /$\{path}
             - RemoveResponseHeader=Access-Control-Allow-Origin
 
         - id: course-management-service
           uri: lb://course-management-service
           predicates:
             - Path=/course-management-service/**
-          filters:
-            - name: RewritePath
-              args:
-                regexp: /course-management-service/(?<path>.*)
-                replacement: /$\{path}
 
         - id: enrollment-service
           uri: lb://enrollmentservice
           predicates:
             - Path=/enrollment-service/**
-          filters:
-            - name: RewritePath
-              args:
-                regexp: /enrollment-service/(?<path>.*)
-                replacement: /$\{path}
 
         - id: content-delivery-service
           uri: lb://content-delivery-service
           predicates:
             - Path=/content-delivery-service/**
-          filters:
-            - name: RewritePath
-              args:
-                regexp: /content-delivery-service/(?<path>.*)
-                replacement: /$\{path}
 
         - id: payment-service
           uri: lb://payment-service

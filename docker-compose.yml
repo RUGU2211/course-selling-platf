@@ -48,10 +48,7 @@ services:
     networks:
       - microservices-network
     environment:
-      - SPRING_PROFILES_ACTIVE=git
-      - SPRING_CLOUD_CONFIG_SERVER_GIT_URI=https://github.com/RUGU2211/course-selling-platform-config.git
-      - SPRING_CLOUD_CONFIG_SERVER_GIT_CLONE_ON_START=true
-      - SPRING_CLOUD_CONFIG_SERVER_GIT_DEFAULT_LABEL=main
+      - SPRING_PROFILES_ACTIVE=native
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8888/actuator/health"]
       interval: 30s
