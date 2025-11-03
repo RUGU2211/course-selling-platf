@@ -25,7 +25,7 @@ spring:
             - DedupeResponseHeader=Access-Control-Allow-Origin, RETAIN_FIRST
           discovery:
             locator:
-              enabled: true
+              enabled: false
               lower-case-service-id: true
           routes:
             # Use service discovery (lb://) for services registered in Eureka
