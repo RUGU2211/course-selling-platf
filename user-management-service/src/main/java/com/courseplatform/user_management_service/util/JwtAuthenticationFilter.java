@@ -86,14 +86,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         logger.debug("JWT Filter - Request URI: {}", path);
 
         // Exclude certain paths from JWT filtering
-        boolean shouldSkip = path.startsWith("/api/users/register") ||
-                path.startsWith("/api/users/login") ||
-                path.startsWith("/api/users/health") ||
-                path.startsWith("/api/users/validate-token") ||
-                path.startsWith("/api/users/stats") ||
+        // Check if path contains these endpoints (works with or without context path)
+        boolean shouldSkip = path.contains("/api/users/register") ||
+                path.contains("/api/users/login") ||
+                path.contains("/api/users/health") ||
+                path.contains("/api/users/validate-token") ||
+                path.contains("/api/users/stats") ||
                 path.startsWith("/actuator/") ||
                 path.startsWith("/h2-console/") ||
-                path.equals("/error");
+                path.equals("/error") ||
+                path.equals("/user-management-service/error");
                 
         logger.debug("JWT Filter - Should skip filtering for path {}: {}", path, shouldSkip);
         return shouldSkip;
