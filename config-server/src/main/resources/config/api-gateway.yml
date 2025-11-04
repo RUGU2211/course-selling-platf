@@ -75,9 +75,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,env,metrics,gateway
+        include: health,info,env,metrics,gateway,refresh
   endpoint:
     health:
       show-details: always
     gateway:
       enabled: true
+  cloud:
+    config:
+      allow-override: true
+      override-system-properties: false
