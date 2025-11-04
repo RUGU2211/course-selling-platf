@@ -239,7 +239,8 @@ pipeline {
         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
           script {
           withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_PASS')]) {
-            sh '''
+            sh script: '''#!/bin/bash
+              set +e
               echo "=========================================="
               echo "Smart Deployment - Only Changed Services"
               echo "=========================================="
@@ -313,9 +314,9 @@ pipeline {
                 return 1
               }
               
-              # Services to potentially rebuild
-              CHANGED_SERVICES=()
-              ALL_SERVICES=("eureka-server" "config-server" "actuator" "api-gateway" "user-service" "course-service" "enrollment-service" "content-service" "frontend")
+              # Services to potentially rebuild (using space-separated string for POSIX compatibility)
+              CHANGED_SERVICES=""
+              ALL_SERVICES="eureka-server config-server actuator api-gateway user-service course-service enrollment-service content-service frontend"
               
               echo "=========================================="
               echo "Detecting Changed Services..."
@@ -334,7 +335,7 @@ pipeline {
                 
                 if detect_changed_service "$service_dir" "$compose_service"; then
                   echo "✓ Changes detected in: $service_dir -> $compose_service"
-                  CHANGED_SERVICES+=("$compose_service")
+                  CHANGED_SERVICES="$CHANGED_SERVICES $compose_service"
                 else
                   echo "○ No changes in: $service_dir -> $compose_service"
                 fi
@@ -351,26 +352,29 @@ pipeline {
               check_service "content-delivery-service" "content-service"
               check_service "frontend" "frontend"
               
+              # Trim leading space
+              CHANGED_SERVICES=$(echo "$CHANGED_SERVICES" | sed 's/^[[:space:]]*//')
+              
               # If no specific changes detected, check if docker-compose.yml changed
-              if [ ${#CHANGED_SERVICES[@]} -eq 0 ]; then
+              if [ -z "$CHANGED_SERVICES" ]; then
                 PREV_COMMIT=$(git rev-parse HEAD~1 2>/dev/null || echo "")
                 if [ -n "$PREV_COMMIT" ] && git diff --name-only $PREV_COMMIT HEAD -- "docker-compose.yml" 2>/dev/null | grep -q .; then
                   echo "⚠ docker-compose.yml changed, will rebuild all services (except protected)"
-                  CHANGED_SERVICES=("${ALL_SERVICES[@]}")
+                  CHANGED_SERVICES="$ALL_SERVICES"
                 fi
               fi
               
               # If still no changes, check if this is a forced rebuild
-              if [ ${#CHANGED_SERVICES[@]} -eq 0 ]; then
+              if [ -z "$CHANGED_SERVICES" ]; then
                 if [ "$FORCE_REBUILD_ALL" == "true" ]; then
                   echo "⚠ FORCE_REBUILD_ALL is enabled, rebuilding all services (except protected)"
-                  CHANGED_SERVICES=("${ALL_SERVICES[@]}")
+                  CHANGED_SERVICES="$ALL_SERVICES"
                 else
                   echo "ℹ No changes detected. For initial deployment or full rebuild, enable FORCE_REBUILD_ALL parameter."
                   echo "ℹ Only pulling images for existing services..."
                   
                   # Just pull images without rebuilding
-                  for imgname in "${ALL_SERVICES[@]}"; do
+                  for imgname in $ALL_SERVICES; do
                     if echo "$PROTECTED_SERVICES" | grep -q "$imgname"; then
                       continue
                     fi
@@ -384,14 +388,14 @@ pipeline {
               fi
               
               # Rebuild changed services if any
-              if [ ${#CHANGED_SERVICES[@]} -gt 0 ]; then
+              if [ -n "$CHANGED_SERVICES" ]; then
                 echo "=========================================="
                 echo "Rebuilding Changed Services Only:"
-                echo "${CHANGED_SERVICES[@]}"
+                echo "$CHANGED_SERVICES"
                 echo "=========================================="
                 
                 # Pull images for changed services
-                for service in "${CHANGED_SERVICES[@]}"; do
+                for service in $CHANGED_SERVICES; do
                   # Map docker-compose service name to image name
                   case $service in
                     "user-service") imgname="user-service" ;;
@@ -409,7 +413,7 @@ pipeline {
                 done
                 
                 # Rebuild and restart only changed services
-                for service in "${CHANGED_SERVICES[@]}"; do
+                for service in $CHANGED_SERVICES; do
                   echo "=========================================="
                   echo "Rebuilding and restarting: $service"
                   echo "=========================================="
@@ -440,7 +444,7 @@ pipeline {
               echo "=========================================="
               echo "Ensuring all services are running..."
               echo "=========================================="
-              for service in "${ALL_SERVICES[@]}"; do
+              for service in $ALL_SERVICES; do
                 if echo "$PROTECTED_SERVICES" | grep -q "$service"; then
                   continue
                 fi
