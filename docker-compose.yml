@@ -257,7 +257,8 @@ services:
       - ~/.kube:/root/.kube
       - ~/.minikube:/root/.minikube:ro
     environment:
-      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -DhttpPort=8090
+      - JENKINS_HTTP_PORT=8090
       - DOCKER_HOST=unix:///var/run/docker.sock
       - KUBECONFIG=/root/.kube/config
     privileged: true
