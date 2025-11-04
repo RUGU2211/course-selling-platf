@@ -36,7 +36,11 @@ fi
 # Create Jenkins home directory
 echo "Setting up Jenkins home directory..."
 sudo mkdir -p /var/lib/jenkins
+sudo mkdir -p /var/cache/jenkins
+sudo mkdir -p /var/log/jenkins
 sudo chown -R ec2-user:ec2-user /var/lib/jenkins
+sudo chown -R ec2-user:ec2-user /var/cache/jenkins
+sudo chown -R ec2-user:ec2-user /var/log/jenkins
 
 # Migrate data from Docker volume if it exists
 if docker volume inspect course-selling-platf_jenkins_home &> /dev/null; then
@@ -88,6 +92,12 @@ User=ec2-user
 Group=ec2-user
 EOF
 
+# Clean up any existing cache directories with wrong ownership
+echo "Cleaning up Jenkins cache directories..."
+sudo rm -rf /var/cache/jenkins/war 2>/dev/null || true
+sudo mkdir -p /var/cache/jenkins/war
+sudo chown -R ec2-user:ec2-user /var/cache/jenkins
+
 # Update Jenkins config.xml if it exists
 if [ -f /var/lib/jenkins/config.xml ]; then
     echo "Updating Jenkins config.xml to use port 8090..."
@@ -95,6 +105,10 @@ if [ -f /var/lib/jenkins/config.xml ]; then
     sudo sed -i 's/<httpPort>8080<\/httpPort>/<httpPort>8090<\/httpPort>/g' /var/lib/jenkins/config.xml
     sudo chown ec2-user:ec2-user /var/lib/jenkins/config.xml
 fi
+
+# Stop Jenkins if it's running (to apply changes)
+echo "Stopping Jenkins if running..."
+sudo systemctl stop jenkins 2>/dev/null || true
 
 # Reload systemd and start Jenkins
 echo "Starting Jenkins service..."
