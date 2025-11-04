@@ -244,24 +244,25 @@ services:
       retries: 5
       start_period: 30s
 
-  # Jenkins (CI/CD)
-  jenkins:
-    build: ./ci/jenkins
-    container_name: course-platform-jenkins
-    user: root
-    restart: unless-stopped
-    network_mode: host
-    volumes:
-      - jenkins_home:/var/jenkins_home
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.kube:/root/.kube
-      - ~/.minikube:/root/.minikube:ro
-    environment:
-      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -DhttpPort=8090
-      - JENKINS_HTTP_PORT=8090
-      - DOCKER_HOST=unix:///var/run/docker.sock
-      - KUBECONFIG=/root/.kube/config
-    privileged: true
+  # Jenkins (CI/CD) - Now running locally on EC2, not in Docker
+  # See ci/jenkins/install-jenkins-local.sh for local installation
+  # jenkins:
+  #   build: ./ci/jenkins
+  #   container_name: course-platform-jenkins
+  #   user: root
+  #   restart: unless-stopped
+  #   network_mode: host
+  #   volumes:
+  #     - jenkins_home:/var/jenkins_home
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - ~/.kube:/root/.kube
+  #     - ~/.minikube:/root/.minikube:ro
+  #   environment:
+  #     - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -DhttpPort=8090
+  #     - JENKINS_HTTP_PORT=8090
+  #     - DOCKER_HOST=unix:///var/run/docker.sock
+  #     - KUBECONFIG=/root/.kube/config
+  #   privileged: true
 
   # Prometheus - Metrics Collection
   prometheus:
