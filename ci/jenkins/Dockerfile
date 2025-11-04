@@ -28,7 +28,16 @@ RUN jenkins-plugin-cli --plugins \
   ssh-agent \
   kubernetes-cli \
   configuration-as-code
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Disable setup wizard
 ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
+ENV JENKINS_HTTP_PORT=8090
+
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
 # Keep as root user - docker-compose will control the user
 # USER jenkins
