@@ -3,63 +3,61 @@ spring:
     name: api-gateway
   cloud:
     gateway:
-      server:
-        webflux:
-          globalcors:
-            add-to-simple-url-handler-mapping: true
-            cors-configurations:
-              '[/**]':
-                allowedOriginPatterns:
-                  - "*"
-                allowedMethods:
-                  - GET
-                  - POST
-                  - PUT
-                  - DELETE
-                  - OPTIONS
-                allowedHeaders:
-                  - "*"
-                allowCredentials: true
-                maxAge: 3600
-          default-filters:
-            - DedupeResponseHeader=Access-Control-Allow-Origin, RETAIN_FIRST
-          discovery:
-            locator:
-              enabled: false
-              lower-case-service-id: true
-          routes:
-            # Use service discovery (lb://) for services registered in Eureka
-            # Services have context paths (e.g., /course-management-service)
-            # Forward the full path including context path to the service
-            - id: user-management-service
-              uri: lb://user-management-service
-              predicates:
-                - Path=/user-management-service/**
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns:
+              - "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+            maxAge: 3600
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin, RETAIN_FIRST
+      discovery:
+        locator:
+          enabled: false
+          lower-case-service-id: true
+      routes:
+        # Use service discovery (lb://) for services registered in Eureka
+        # Services have context paths (e.g., /course-management-service)
+        # Forward the full path including context path to the service
+        - id: user-management-service
+          uri: lb://user-management-service
+          predicates:
+            - Path=/user-management-service/**
 
-            - id: course-management-service
-              uri: lb://course-management-service
-              predicates:
-                - Path=/course-management-service/**
+        - id: course-management-service
+          uri: lb://course-management-service
+          predicates:
+            - Path=/course-management-service/**
 
-            - id: enrollment-service
-              uri: lb://enrollmentservice
-              predicates:
-                - Path=/enrollment-service/**
+        - id: enrollment-service
+          uri: lb://enrollmentservice
+          predicates:
+            - Path=/enrollment-service/**
 
-            - id: content-delivery-service
-              uri: lb://content-delivery-service
-              predicates:
-                - Path=/content-delivery-service/**
+        - id: content-delivery-service
+          uri: lb://content-delivery-service
+          predicates:
+            - Path=/content-delivery-service/**
 
-            - id: payment-service
-              uri: lb://payment-service
-              predicates:
-                - Path=/payment-service/**
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/payment-service/**
 
-            - id: notification-service
-              uri: lb://notification-service
-              predicates:
-                - Path=/notification-service/**
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/notification-service/**
 
 eureka:
   client:
