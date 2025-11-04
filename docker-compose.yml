@@ -315,7 +315,6 @@ services:
 
 volumes:
   mysql-data:
-  jenkins_home:
   prometheus-data:
   grafana-data:
 

@@ -118,7 +118,52 @@ sudo systemctl start jenkins
 
 # Wait for Jenkins to start
 echo "Waiting for Jenkins to start..."
-sleep 15
+sleep 30
+
+# Wait for Jenkins to be fully ready (check if it's responding)
+echo "Waiting for Jenkins to be ready..."
+for i in {1..30}; do
+  if curl -s http://localhost:8090 > /dev/null 2>&1; then
+    echo "Jenkins is ready!"
+    break
+  fi
+  echo "Waiting for Jenkins... ($i/30)"
+  sleep 2
+done
+
+# Install Jenkins plugins
+echo "Installing Jenkins plugins..."
+JENKINS_CLI="/usr/lib/jenkins/jenkins-cli.jar"
+JENKINS_URL="http://localhost:8090"
+
+# Wait for Jenkins to be fully initialized
+sleep 10
+
+# Get initial admin password if needed
+if [ -f /var/lib/jenkins/secrets/initialAdminPassword ]; then
+  INITIAL_PASSWORD=$(sudo cat /var/lib/jenkins/secrets/initialAdminPassword)
+  echo "Initial admin password: $INITIAL_PASSWORD"
+fi
+
+# Install plugins using Jenkins CLI (if available) or via script
+PLUGINS="workflow-aggregator pipeline-stage-view git github docker-workflow blueocean kubernetes-cli configuration-as-code credentials credentials-binding ssh-agent"
+
+# Try to install plugins via Jenkins CLI
+if [ -f "$JENKINS_CLI" ]; then
+  echo "Installing plugins via Jenkins CLI..."
+  for plugin in $PLUGINS; do
+    echo "Installing $plugin..."
+    java -jar "$JENKINS_CLI" -s "$JENKINS_URL" install-plugin "$plugin" -deploy || echo "⚠ Failed to install $plugin via CLI"
+  done
+  
+  echo "Restarting Jenkins to apply plugins..."
+  sudo systemctl restart jenkins
+  sleep 30
+else
+  echo "⚠ Jenkins CLI not found. Please install plugins manually:"
+  echo "   Go to: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo 'localhost'):8090/pluginManager/available"
+  echo "   Install these plugins: $PLUGINS"
+fi
 
 # Check Jenkins status
 echo "=========================================="
