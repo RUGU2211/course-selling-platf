@@ -25,6 +25,7 @@ pipeline {
   parameters {
     booleanParam(name: 'FORCE_DEPLOY', defaultValue: true, description: 'Deploy to Kubernetes regardless of branch')
     booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip unit tests')
+    booleanParam(name: 'FORCE_REBUILD_ALL', defaultValue: false, description: 'Force rebuild all services (ignores change detection)')
   }
   
   options { 
@@ -240,22 +241,11 @@ pipeline {
           withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_PASS')]) {
             sh '''
               echo "=========================================="
-              echo "Pulling Images and Creating Containers"
+              echo "Smart Deployment - Only Changed Services"
               echo "=========================================="
               
               echo "Logging in to Docker Hub..."
               echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USER" --password-stdin || true
-              
-              # Pull all images (continuing on failures)
-              for imgname in eureka-server config-server actuator api-gateway user-service course-service enrollment-service content-service frontend; do
-                echo "Pulling ${DOCKERHUB_USER}/course-plat-${imgname}:${IMAGE_TAG}..."
-                docker pull ${DOCKERHUB_USER}/course-plat-${imgname}:${IMAGE_TAG} || {
-                  echo "⚠ Failed to pull ${imgname}:${IMAGE_TAG}, trying latest..."
-                  docker pull ${DOCKERHUB_USER}/course-plat-${imgname}:latest || echo "⚠ Failed to pull ${imgname}:latest, continuing..."
-                }
-              done
-              
-              echo "✓ Image pull attempts completed"
               
               # Determine docker-compose command (v1 vs v2)
               if command -v docker-compose > /dev/null 2>&1; then
@@ -267,35 +257,208 @@ pipeline {
                 COMPOSE_CMD="docker compose"
               fi
               
-              # Stop and remove existing containers (force cleanup)
-              echo "Stopping and removing existing containers..."
-              $COMPOSE_CMD down -v --remove-orphans 2>/dev/null || echo "No existing containers to stop"
+              # Services that should NEVER be restarted
+              PROTECTED_SERVICES="mysql jenkins"
               
-              # Also remove containers by name if they still exist (Jenkins may have orphaned containers)
-              echo "Cleaning up any orphaned containers..."
-              docker rm -f course-platform-eureka course-platform-config course-platform-actuator \
-                          course-platform-api-gateway course-platform-user-service \
-                          course-platform-course-service course-platform-enrollment-service \
-                          course-platform-content-service course-platform-frontend \
-                          course-platform-mysql course-platform-jenkins \
-                          course-platform-prometheus course-platform-grafana 2>/dev/null || true
-              
-              # Clean up any remaining containers with course-platform prefix
-              docker ps -a --filter "name=course-platform" --format "{{.Names}}" | xargs -r docker rm -f 2>/dev/null || true
-              
-              echo "Starting containers..."
-              if $COMPOSE_CMD up -d 2>&1; then
-                echo "✓ Containers started successfully"
+              # Ensure MySQL is always running first (critical service)
+              echo "=========================================="
+              echo "Ensuring MySQL is running..."
+              echo "=========================================="
+              if ! docker ps --format "{{.Names}}" | grep -q "^course-platform-mysql$"; then
+                echo "MySQL is not running, starting it..."
+                $COMPOSE_CMD up -d mysql || {
+                  echo "⚠ Failed to start MySQL, but continuing..."
+                }
+                sleep 5
               else
-                echo "⚠ Failed to start containers with $COMPOSE_CMD, checking status..."
-                $COMPOSE_CMD ps 2>/dev/null || docker ps --filter "name=course-platform" || true
+                echo "✓ MySQL is already running"
               fi
               
-              echo "Container status:"
+              # Function to detect if a service directory has changed
+              detect_changed_service() {
+                local service_dir=$1
+                local service_name=$2
+                
+                # Check if service directory exists
+                if [ ! -d "$service_dir" ]; then
+                  return 1
+                fi
+                
+                # Get the previous commit (or use a base commit)
+                PREV_COMMIT=$(git rev-parse HEAD~1 2>/dev/null || echo "")
+                
+                if [ -z "$PREV_COMMIT" ]; then
+                  # If no previous commit, check if this is initial build
+                  # Compare with current HEAD to see if there are any changes
+                  if git diff --quiet HEAD HEAD -- "$service_dir" 2>/dev/null; then
+                    return 1
+                  else
+                    return 0
+                  fi
+                fi
+                
+                # Check if files in service directory changed between commits
+                if git diff --name-only $PREV_COMMIT HEAD -- "$service_dir" 2>/dev/null | grep -q .; then
+                  return 0
+                fi
+                
+                # Also check if docker-compose.yml changed (might affect all services)
+                if git diff --name-only $PREV_COMMIT HEAD -- "docker-compose.yml" 2>/dev/null | grep -q .; then
+                  # Check if this specific service is mentioned in docker-compose changes
+                  if git diff $PREV_COMMIT HEAD -- "docker-compose.yml" 2>/dev/null | grep -q "$service_name"; then
+                    return 0
+                  fi
+                fi
+                
+                return 1
+              }
+              
+              # Services to potentially rebuild
+              CHANGED_SERVICES=()
+              ALL_SERVICES=("eureka-server" "config-server" "actuator" "api-gateway" "user-service" "course-service" "enrollment-service" "content-service" "frontend")
+              
+              echo "=========================================="
+              echo "Detecting Changed Services..."
+              echo "=========================================="
+              
+              # Check each service for changes (service_dir -> compose_service mapping)
+              check_service() {
+                local service_dir=$1
+                local compose_service=$2
+                
+                # Skip protected services
+                if echo "$PROTECTED_SERVICES" | grep -q "$compose_service"; then
+                  echo "⏭ Skipping protected service: $compose_service"
+                  return
+                fi
+                
+                if detect_changed_service "$service_dir" "$compose_service"; then
+                  echo "✓ Changes detected in: $service_dir -> $compose_service"
+                  CHANGED_SERVICES+=("$compose_service")
+                else
+                  echo "○ No changes in: $service_dir -> $compose_service"
+                fi
+              }
+              
+              # Check all services
+              check_service "eureka-server" "eureka-server"
+              check_service "config-server" "config-server"
+              check_service "actuator" "actuator"
+              check_service "api-gateway" "api-gateway"
+              check_service "user-management-service" "user-service"
+              check_service "course-management-service" "course-service"
+              check_service "enrollmentservice" "enrollment-service"
+              check_service "content-delivery-service" "content-service"
+              check_service "frontend" "frontend"
+              
+              # If no specific changes detected, check if docker-compose.yml changed
+              if [ ${#CHANGED_SERVICES[@]} -eq 0 ]; then
+                PREV_COMMIT=$(git rev-parse HEAD~1 2>/dev/null || echo "")
+                if [ -n "$PREV_COMMIT" ] && git diff --name-only $PREV_COMMIT HEAD -- "docker-compose.yml" 2>/dev/null | grep -q .; then
+                  echo "⚠ docker-compose.yml changed, will rebuild all services (except protected)"
+                  CHANGED_SERVICES=("${ALL_SERVICES[@]}")
+                fi
+              fi
+              
+              # If still no changes, check if this is a forced rebuild
+              if [ ${#CHANGED_SERVICES[@]} -eq 0 ]; then
+                if [ "$FORCE_REBUILD_ALL" == "true" ]; then
+                  echo "⚠ FORCE_REBUILD_ALL is enabled, rebuilding all services (except protected)"
+                  CHANGED_SERVICES=("${ALL_SERVICES[@]}")
+                else
+                  echo "ℹ No changes detected. For initial deployment or full rebuild, enable FORCE_REBUILD_ALL parameter."
+                  echo "ℹ Only pulling images for existing services..."
+                  
+                  # Just pull images without rebuilding
+                  for imgname in "${ALL_SERVICES[@]}"; do
+                    if echo "$PROTECTED_SERVICES" | grep -q "$imgname"; then
+                      continue
+                    fi
+                    echo "Pulling ${DOCKERHUB_USER}/course-plat-${imgname}:${IMAGE_TAG}..."
+                    docker pull ${DOCKERHUB_USER}/course-plat-${imgname}:${IMAGE_TAG} || {
+                      echo "⚠ Failed to pull ${imgname}:${IMAGE_TAG}, trying latest..."
+                      docker pull ${DOCKERHUB_USER}/course-plat-${imgname}:latest || echo "⚠ Failed to pull ${imgname}:latest, continuing..."
+                    }
+                  done
+                fi
+              fi
+              
+              # Rebuild changed services if any
+              if [ ${#CHANGED_SERVICES[@]} -gt 0 ]; then
+                echo "=========================================="
+                echo "Rebuilding Changed Services Only:"
+                echo "${CHANGED_SERVICES[@]}"
+                echo "=========================================="
+                
+                # Pull images for changed services
+                for service in "${CHANGED_SERVICES[@]}"; do
+                  # Map docker-compose service name to image name
+                  case $service in
+                    "user-service") imgname="user-service" ;;
+                    "course-service") imgname="course-service" ;;
+                    "enrollment-service") imgname="enrollment-service" ;;
+                    "content-service") imgname="content-service" ;;
+                    *) imgname="$service" ;;
+                  esac
+                  
+                  echo "Pulling ${DOCKERHUB_USER}/course-plat-${imgname}:${IMAGE_TAG}..."
+                  docker pull ${DOCKERHUB_USER}/course-plat-${imgname}:${IMAGE_TAG} || {
+                    echo "⚠ Failed to pull ${imgname}:${IMAGE_TAG}, trying latest..."
+                    docker pull ${DOCKERHUB_USER}/course-plat-${imgname}:latest || echo "⚠ Failed to pull ${imgname}:latest, continuing..."
+                  }
+                done
+                
+                # Rebuild and restart only changed services
+                for service in "${CHANGED_SERVICES[@]}"; do
+                  echo "=========================================="
+                  echo "Rebuilding and restarting: $service"
+                  echo "=========================================="
+                  
+                  # Stop only this specific service
+                  echo "Stopping $service..."
+                  $COMPOSE_CMD stop "$service" 2>/dev/null || true
+                  
+                  # Remove only this specific service container
+                  echo "Removing $service container..."
+                  $COMPOSE_CMD rm -f "$service" 2>/dev/null || true
+                  
+                  # Rebuild and start only this service (without dependencies to avoid restarting MySQL/Jenkins)
+                  echo "Rebuilding and starting $service..."
+                  $COMPOSE_CMD up -d --build --no-deps "$service" || {
+                    echo "⚠ Failed to rebuild $service, trying without --no-deps..."
+                    $COMPOSE_CMD up -d --build "$service" || {
+                      echo "✗ Failed to rebuild $service, continuing with other services..."
+                    }
+                  }
+                  
+                  echo "✓ Completed rebuild for $service"
+                  sleep 2
+                done
+              fi
+              
+              # Ensure all non-protected services are running (in case some weren't started)
+              echo "=========================================="
+              echo "Ensuring all services are running..."
+              echo "=========================================="
+              for service in "${ALL_SERVICES[@]}"; do
+                if echo "$PROTECTED_SERVICES" | grep -q "$service"; then
+                  continue
+                fi
+                
+                if ! docker ps --format "{{.Names}}" | grep -q "course-platform-.*${service}"; then
+                  echo "Service $service is not running, starting it..."
+                  $COMPOSE_CMD up -d "$service" 2>/dev/null || echo "⚠ Failed to start $service"
+                fi
+              done
+              
+              echo "=========================================="
+              echo "Container Status:"
+              echo "=========================================="
               $COMPOSE_CMD ps 2>/dev/null || docker ps --filter "name=course-platform" || true
               
               echo "=========================================="
-              echo "Container deployment attempt completed"
+              echo "✓ Smart deployment completed!"
+              echo "Protected services (MySQL, Jenkins) were NOT restarted"
               echo "=========================================="
             '''
             }

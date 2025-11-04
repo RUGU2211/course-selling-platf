@@ -3,6 +3,7 @@ services:
   mysql:
     image: mysql:8.0
     container_name: course-platform-mysql
+    restart: always
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: course_platform
