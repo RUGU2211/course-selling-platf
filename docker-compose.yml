@@ -250,8 +250,7 @@ services:
     container_name: course-platform-jenkins
     user: root
     restart: unless-stopped
-    ports:
-      - "8090:8080"
+    network_mode: host
     volumes:
       - jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
@@ -261,8 +260,6 @@ services:
       - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
       - DOCKER_HOST=unix:///var/run/docker.sock
       - KUBECONFIG=/root/.kube/config
-    networks:
-      - microservices-network
     privileged: true
 
   # Prometheus - Metrics Collection
